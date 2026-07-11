@@ -99,19 +99,21 @@ func downloadCookieFile(url string) error {
 	rawURL := "https://batbin.me/raw/" + id
 	filePath := filepath.Join(cookieDir, id+".txt")
 
-	resp, err := client.R().
-		SetOutputFileName(filePath).
-		Get(rawURL)
+	resp, err := client.R().Get(rawURL)
 	if err != nil {
 		return err
 	}
 
-	if resp.IsError() {
+	if resp.StatusCode() >= 400 {
 		return fmt.Errorf(
 			"unexpected status %d from %s",
 			resp.StatusCode(),
 			rawURL,
 		)
+	}
+
+	if err := os.WriteFile(filePath, resp.Bytes(), 0o600); err != nil {
+		return fmt.Errorf("failed to write cookie file %s: %w", filePath, err)
 	}
 
 	return nil
@@ -155,3 +157,4 @@ func GetRandomCookieFile() (string, error) {
 
 	return cachedFiles[rand.Intn(len(cachedFiles))], nil
 }
+
