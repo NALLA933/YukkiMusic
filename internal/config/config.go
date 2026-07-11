@@ -121,21 +121,21 @@ func loadConfig() {
 	OwnerID = getInt64("OWNER_ID", 0)
 	SpotifyClientID = getString("SPOTIFY_CLIENT_ID", "")
 	SpotifyClientSecret = getString("SPOTIFY_CLIENT_SECRET", "")
-	FallenAPIURL = getString("FALLEN_API_URL", "https://beta.fallenapi.fun")
+	FallenAPIURL = getString("FALLEN_API_URL", "https://api.onegrab.fun")
 	FallenAPIKey = getString("FALLEN_API_KEY", "")
 	DefaultLang = getString("DEFAULT_LANG", "en")
 	DurationLimit = int(getInt64("DURATION_LIMIT", 4200))
 	LeaveOnDemoted = getBool("LEAVE_ON_DEMOTED", false)
 	QueueLimit = int(getInt64("QUEUE_LIMIT", 24))
-	SupportChat = getString("SUPPORT_CHAT", "https://t.me/TheTeamVk")
-	SupportChannel = getString("SUPPORT_CHANNEL", "https://t.me/TheTeamVivek")
+	SupportChat = getString("SUPPORT_CHAT", "https://t.me/THE_DRAGON_SUPPORT")
+	SupportChannel = getString("SUPPORT_CHANNEL", "https://t.me/Senpai_Updates")
 	CookiesLink = getString("COOKIES_LINK", "")
 	SetCmds = getBool("SET_CMDS", false)
 	MaxAuthUsers = int(getInt64("MAX_AUTH_USERS", 25))
 	StartImages = getStringSlice("START_IMAGES", nil)
 	EffectIDs = getInt64Slice("EFFECT_IDS", nil)
 	if len(StartImages) == 0 {
-		StartImage := getString("START_IMG_URL", "")
+		StartImage := getString("START_IMG_URL", "https://files.catbox.moe/vyde1h.jpg")
 		if StartImage != "" {
 			StartImages = []string{StartImage}
 		}
