@@ -24,7 +24,9 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -262,7 +264,9 @@ func (y *YtdlpPlatform) Download(
 		)
 	} else {
 		args = append(args,
-			"-f", "ba[abr>=180][abr<=360]/ba",
+			// YouTube often only exposes 128/160 kbps audio. Restricting the
+			// bitrate makes otherwise playable tracks fail to download.
+			"-f", "bestaudio/best",
 			"-x",
 			"--concurrent-fragments", "4",
 		)
@@ -270,6 +274,13 @@ func (y *YtdlpPlatform) Download(
 
 	// Cookies (YouTube only)
 	if y.isYouTubeURL(track.URL) {
+		// Recent YouTube player challenges require yt-dlp's EJS solver to
+		// retrieve playable media formats. Deno is installed by install.sh.
+		args = append(args, "--remote-components", "ejs:github")
+		if home, err := os.UserHomeDir(); err == nil {
+			args = append(args, "--js-runtimes", "deno:"+filepath.Join(home, ".deno", "bin"))
+		}
+
 		if cookieFile, err := cookies.GetRandomCookieFile(); err == nil &&
 			cookieFile != "" {
 			args = append(args, "--cookies", cookieFile)
@@ -294,7 +305,7 @@ func (y *YtdlpPlatform) Download(
 		outStr := strings.TrimSpace(stdout.String())
 
 		gologging.ErrorF(
-			"YtDlp: Download failed for %s: %v\nSTDOUT:\n%s\nSTDERR:\n%s",
+			"YtDlp: Download failed for %s: %v | stdout=%q | stderr=%q",
 			track.URL, err, outStr, errStr,
 		)
 		findAndRemove(track)

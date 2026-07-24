@@ -40,6 +40,7 @@ import (
 	"github.com/Laky-64/gologging"
 
 	"main/internal/config"
+	"main/internal/cookies"
 	"main/internal/core"
 	"main/internal/database"
 	"main/internal/locales"
@@ -55,6 +56,10 @@ func main() {
 	}
 	defer cfgCleanup()
 	initLogger()
+
+	if err := cookies.Initialize(); err != nil {
+		gologging.Fatal("Failed to initialize cookies: " + err.Error())
+	}
 
 	shutdownPlatforms, err := platforms.Init()
 	if err != nil {

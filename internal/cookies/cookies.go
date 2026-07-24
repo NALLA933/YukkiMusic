@@ -44,11 +44,14 @@ var (
 //go:embed *.txt
 var embeddedCookies embed.FS
 
-func init() {
+// Initialize loads bundled cookies and retrieves any cookie files configured in
+// COOKIES_LINK. It must be called after config.Load, because package init runs
+// before the .env file has been read.
+func Initialize() error {
 	gologging.Debug("🔹 Initializing cookies...")
 
 	if err := copyEmbeddedCookies(); err != nil {
-		gologging.Fatal("Failed to copy embedded cookies:", err)
+		return fmt.Errorf("copy embedded cookies: %w", err)
 	}
 
 	urls := strings.Fields(config.CookiesLink)
@@ -61,6 +64,8 @@ func init() {
 			)
 		}
 	}
+
+	return nil
 }
 
 func copyEmbeddedCookies() error {
@@ -157,4 +162,3 @@ func GetRandomCookieFile() (string, error) {
 
 	return cachedFiles[rand.Intn(len(cachedFiles))], nil
 }
-
