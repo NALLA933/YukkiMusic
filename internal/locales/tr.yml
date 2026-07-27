@@ -8,6 +8,8 @@ ADD_ME_BTN: "⚡ Beni Grubuna Ekle"
 BROADCAST_CANCEL_BTN: "🚫 Yayını İptal Et"
 CLOSE_BTN: "Kapat"
 DOWNLOAD_CANCEL_BTN: "🚦 İndirmeyi İptal Et"
+AUTOPLAY_ON_BTN: "▶️ Otomatik çalma: AÇIK"
+AUTOPLAY_OFF_BTN: "▶️ Otomatik çalma: KAPALI"
 GC_HELP_BTN: "📒 Komutlar"
 
 START_HELP_BTN: "❓ Yardım ve Komutlar"
@@ -809,6 +811,10 @@ stopped: "⏹️ <b>Oynatma {user} tarafından durduruldu ve sıra temizlendi.</
 
 shuffle_current_state: "🔀 Bu sohbet için karıştırma şu an <b>{state}</b>.\n\nDeğiştirmek için <code>{cmd}</code> kullan."
 shuffle_updated: "🔀 Karıştırma, {user} tarafından <b>{state}</b> konumuna getirildi."
+autoplay_current_state: "▶️ Bu sohbet için otomatik çalma şu an <b>{state}</b>.\n\nDeğiştirmek için <code>{cmd}</code> kullan."
+autoplay_updated: "▶️ Otomatik çalma, {user} tarafından <b>{state}</b> konumuna getirildi."
+autoplay_stopped_no_listeners: "⏹️ Sesli sohbette asistan dışında kimse olmadığı için otomatik çalma durduruldu."
+autoplay_help_entry: "<b>/autoplay</b> - Sıra bittiğinde ilgili parçaları çalar. <code>/autoplay on</code> veya <code>/autoplay off</code> kullan."
 
 skip_stopped: "⏹️ Oynatma durduruldu. Sıra boş.\nAtlayan: {user}"
 skip_invalid_number: "⚠️ Lütfen /skip komutundan sonra geçerli bir sayı verin.\nÖrnek: <code>/skip 3</code>"
