@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"strings"
 	"time"
@@ -270,18 +271,26 @@ func (p *YouTubePlatform) VideoSearch(
 // AutoplayTrack returns a different YouTube result for a completed track.
 // Search results are used as a reliable fallback for sources that do not expose
 // a native related-videos feed.
-func AutoplayTrack(current *state.Track) (*state.Track, error) {
+//
+// history holds the IDs of tracks that were played recently (see
+// modules.recentAutoplayTracks); any track whose ID appears in it, or which
+// matches the track that was just played, is skipped so autoplay does not
+// loop back to a song that was already played a moment ago.
+func AutoplayTrack(current *state.Track, history []string) (*state.Track, error) {
 	if current == nil || strings.TrimSpace(current.Title) == "" {
 		return nil, errors.New("current track has no title")
 	}
+
+	excluded := autoplayExcludeSet(current.ID, history)
+
 	if current.Source == PlatformSpotify {
-		if track, err := spotifyAutoplayTrack(current); err == nil {
+		if track, err := spotifyAutoplayTrack(current, excluded); err == nil {
 			return track, nil
 		}
 	}
 
 	if videoID := yt.extractVideoID(current.URL); videoID != "" {
-		if track, err := yt.relatedTrack(videoID, current); err == nil {
+		if track, err := yt.relatedTrack(videoID, current, excluded); err == nil {
 			return track, nil
 		}
 	}
@@ -290,19 +299,44 @@ func AutoplayTrack(current *state.Track) (*state.Track, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	var candidates []*state.Track
 	for _, track := range results {
-		if track != nil && track.ID != current.ID {
-			track.Video = current.Video
-			track.Requester = "Autoplay"
-			return track, nil
+		if track != nil && !excluded[track.ID] {
+			candidates = append(candidates, track)
 		}
 	}
-	return nil, errors.New("no alternative autoplay result found")
+	if len(candidates) == 0 {
+		return nil, errors.New("no alternative autoplay result found")
+	}
+
+	track := candidates[rand.Intn(len(candidates))]
+	track.Video = current.Video
+	track.Requester = "Autoplay"
+	return track, nil
+}
+
+// autoplayExcludeSet builds a lookup of track IDs that autoplay must not
+// pick again: the track that was just played, plus everything still in the
+// recent-history list.
+func autoplayExcludeSet(currentID string, history []string) map[string]bool {
+	set := make(map[string]bool, len(history)+1)
+	if currentID != "" {
+		set[currentID] = true
+	}
+	for _, id := range history {
+		set[id] = true
+	}
+	return set
 }
 
 // relatedTrack asks YouTube's next endpoint for actual related videos. It is
 // the same recommendation source that powers YouTube's own Up next results.
-func (p *YouTubePlatform) relatedTrack(videoID string, current *state.Track) (*state.Track, error) {
+// It picks randomly among the eligible related videos (those not in
+// excluded) instead of always returning the first one, so consecutive
+// autoplay calls for the same seed track do not keep producing the same
+// "next" song.
+func (p *YouTubePlatform) relatedTrack(videoID string, current *state.Track, excluded map[string]bool) (*state.Track, error) {
 	var result map[string]any
 	payload := map[string]any{
 		"context": map[string]any{
@@ -319,15 +353,22 @@ func (p *YouTubePlatform) relatedTrack(videoID string, current *state.Track) (*s
 
 	var tracks []*state.Track
 	p.parseNodes(result, &tracks, config.QueueLimit, "compactVideoRenderer")
+
+	var candidates []*state.Track
 	for _, track := range tracks {
-		if track == nil || track.ID == current.ID || track.ID == videoID {
+		if track == nil || track.ID == videoID || excluded[track.ID] {
 			continue
 		}
-		track.Video = current.Video
-		track.Requester = "Autoplay"
-		return track, nil
+		candidates = append(candidates, track)
 	}
-	return nil, errors.New("no related YouTube track found")
+	if len(candidates) == 0 {
+		return nil, errors.New("no related YouTube track found")
+	}
+
+	track := candidates[rand.Intn(len(candidates))]
+	track.Video = current.Video
+	track.Requester = "Autoplay"
+	return track, nil
 }
 
 func (p *YouTubePlatform) extractPlaylistID(input string) string {
