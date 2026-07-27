@@ -116,42 +116,92 @@ func setAutoplay(r *core.RoomState, enabled bool) error {
 	return nil
 }
 
-// recentAutoplayTracks returns the IDs of the tracks autoplay has played
-// most recently in this room (oldest first, newest last). Autoplay uses
-// this list to avoid selecting a song that already played recently.
-func recentAutoplayTracks(r *core.RoomState) []string {
+// autoplayHistorySep separates the ID and title within a single stored
+// history entry (see rememberAutoplayTrack). It is a control character that
+// will never appear in a real track ID or title.
+const autoplayHistorySep = "\x1f"
+
+// autoplayHistoryEntry is one remembered "recently played" track.
+type autoplayHistoryEntry struct {
+	ID    string
+	Title string
+}
+
+// recentAutoplayEntries decodes the stored history into ID+Title pairs.
+func recentAutoplayEntries(r *core.RoomState) []autoplayHistoryEntry {
 	ok, value := r.GetData(recentTracksDataKey)
 	if !ok {
 		return nil
 	}
-	history, isSlice := value.([]string)
+	raw, isSlice := value.([]string)
 	if !isSlice {
 		return nil
 	}
-	return history
+	entries := make([]autoplayHistoryEntry, 0, len(raw))
+	for _, item := range raw {
+		parts := strings.SplitN(item, autoplayHistorySep, 2)
+		entry := autoplayHistoryEntry{ID: parts[0]}
+		if len(parts) > 1 {
+			entry.Title = parts[1]
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+// recentAutoplayTracks returns the IDs of the tracks autoplay has played
+// most recently in this room (oldest first, newest last). Autoplay uses
+// this list to avoid selecting a song that already played recently.
+func recentAutoplayTracks(r *core.RoomState) []string {
+	entries := recentAutoplayEntries(r)
+	ids := make([]string, 0, len(entries))
+	for _, e := range entries {
+		ids = append(ids, e.ID)
+	}
+	return ids
+}
+
+// recentAutoplayTitles returns the titles of recently played tracks. This is
+// used to catch different YouTube uploads of the same song (lyric video,
+// slowed + reverb, remix, 8D audio, etc.) that have different track IDs but
+// are really "the same song again".
+func recentAutoplayTitles(r *core.RoomState) []string {
+	entries := recentAutoplayEntries(r)
+	titles := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.Title != "" {
+			titles = append(titles, e.Title)
+		}
+	}
+	return titles
 }
 
 // rememberAutoplayTrack records that a track was just played by autoplay.
 // It keeps only the most recent maxAutoplayHistory entries: once the list
-// is full, the oldest track ID is automatically dropped (FIFO), so the
+// is full, the oldest track is automatically dropped (FIFO), so the
 // history never grows unbounded and old songs become eligible again.
-func rememberAutoplayTrack(r *core.RoomState, trackID string) {
+func rememberAutoplayTrack(r *core.RoomState, trackID, title string) {
 	if trackID == "" {
 		return
 	}
 
-	history := recentAutoplayTracks(r)
-	for _, id := range history {
-		if id == trackID {
+	entries := recentAutoplayEntries(r)
+	for _, e := range entries {
+		if e.ID == trackID {
 			return // already the most recent history, nothing to do
 		}
 	}
 
-	history = append(history, trackID)
-	if len(history) > maxAutoplayHistory {
-		history = history[len(history)-maxAutoplayHistory:]
+	entries = append(entries, autoplayHistoryEntry{ID: trackID, Title: title})
+	if len(entries) > maxAutoplayHistory {
+		entries = entries[len(entries)-maxAutoplayHistory:]
 	}
-	r.SetData(recentTracksDataKey, history)
+
+	raw := make([]string, len(entries))
+	for i, e := range entries {
+		raw[i] = e.ID + autoplayHistorySep + e.Title
+	}
+	r.SetData(recentTracksDataKey, raw)
 }
 
 // hasAutoplayListener reports whether somebody other than the active assistant
