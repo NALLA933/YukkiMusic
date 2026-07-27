@@ -474,6 +474,7 @@
   "shuffle_updated": "🔀 𝐒ʜᴜꜰꜰʟᴇ <b>{state}</b> ʙʏ {user}.",
   "autoplay_current_state": "▶️ Autoplay is currently <b>{state}</b> for this chat.\n\nUse <code>{cmd}</code> to change it.",
   "autoplay_updated": "▶️ Autoplay <b>{state}</b> by {user}.",
+  "autoplay_updated_alert": "▶️ Autoplay {state}.",
   "autoplay_stopped_no_listeners": "⏹️ Autoplay stopped because nobody else is in the voice chat.",
   "autoplay_help_entry": "<b>/autoplay</b> - Continue with related songs when the queue ends. Use <code>/autoplay on</code> or <code>/autoplay off</code>.",
 

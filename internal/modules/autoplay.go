@@ -12,6 +12,7 @@ import (
 	"github.com/amarnathcjd/gogram/telegram"
 
 	"main/internal/core"
+	"main/internal/database"
 	"main/internal/locales"
 	"main/internal/utils"
 )
@@ -76,7 +77,11 @@ func handleAutoplay(m *telegram.NewMessage, cplay bool) error {
 		return telegram.ErrEndGroup
 	}
 
-	r.SetData(autoplayDataKey, enabled)
+	if err := setAutoplay(r, enabled); err != nil {
+		gologging.ErrorF("failed to save autoplay setting for %d: %v", r.ID, err)
+		m.Reply(F(chatID, "generic_error", locales.Arg{"error": err.Error()}))
+		return telegram.ErrEndGroup
+	}
 	state := F(chatID, "disabled")
 	if enabled {
 		state = F(chatID, "enabled")
@@ -92,6 +97,14 @@ func autoplayEnabled(r interface{ GetData(string) (bool, any) }) bool {
 	ok, value := r.GetData(autoplayDataKey)
 	enabled, isBool := value.(bool)
 	return ok && isBool && enabled
+}
+
+func setAutoplay(r *core.RoomState, enabled bool) error {
+	if err := database.SetAutoplayEnabled(r.ID, enabled); err != nil {
+		return err
+	}
+	r.SetData(autoplayDataKey, enabled)
+	return nil
 }
 
 // hasAutoplayListener reports whether somebody other than the active assistant
