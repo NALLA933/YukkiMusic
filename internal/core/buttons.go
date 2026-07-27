@@ -60,23 +60,10 @@ func AddMeMarkup(chatID int64) tg.ReplyMarkup {
 		Build()
 }
 
-func GetCancelKeyboard(chatID int64, r *RoomState) *tg.ReplyInlineMarkup {
-	autoplayLabel := F(chatID, "AUTOPLAY_OFF_BTN")
-	if r != nil {
-		if ok, enabled := r.GetData("autoplay"); ok && enabled == true {
-			autoplayLabel = F(chatID, "AUTOPLAY_ON_BTN")
-		}
-	}
-
-	autoplayCallback := "autoplay:0"
-	if r != nil {
-		autoplayCallback = fmt.Sprintf("autoplay:%d", r.ID)
-	}
-
+func GetCancelKeyboard(chatID int64) *tg.ReplyInlineMarkup {
 	return tg.NewKeyboard().
 		AddRow(
 			tg.Button.Data(F(chatID, "DOWNLOAD_CANCEL_BTN"), "cancel"),
-			tg.Button.Data(autoplayLabel, autoplayCallback),
 		).
 		Build()
 }
