@@ -322,6 +322,11 @@ var handlers = []MsgHandlerDef{
 		Filters: []telegram.Filter{superGroupFilter, authFilter},
 	},
 	{
+		Pattern: "autoplay",
+		Handler: autoplayHandler,
+		Filters: []telegram.Filter{superGroupFilter, authFilter},
+	},
+	{
 		Pattern: "(end|stop)",
 		Handler: stopHandler,
 		Filters: []telegram.Filter{superGroupFilter, authFilter},
@@ -397,6 +402,11 @@ var handlers = []MsgHandlerDef{
 	{
 		Pattern: "(cloop|csetloop)",
 		Handler: cloopHandler,
+		Filters: []telegram.Filter{superGroupFilter, authFilter},
+	},
+	{
+		Pattern: "cautoplay",
+		Handler: cautoplayHandler,
 		Filters: []telegram.Filter{superGroupFilter, authFilter},
 	},
 	{
@@ -500,6 +510,7 @@ var cbHandlers = []CbHandlerDef{
 
 	{Pattern: "^close$", Handler: closeHandler},
 	{Pattern: "^cancel$", Handler: cancelHandler},
+	{Pattern: "^autoplay:-?\\d+$", Handler: autoplayToggleCB},
 	{Pattern: "^restart:(bot|replay)$", Handler: restartConfirmHandler},
 	{Pattern: "^bcast_cancel$", Handler: broadcastCancelCB},
 	{Pattern: "^rtmp_stop$", Handler: rtmpStopCallbackHandler},
@@ -560,7 +571,7 @@ func Init(bot *telegram.Client, assistants *core.AssistantManager) {
 		"/cmute", "/cunmute", "/cseek", "/cseekback",
 		"/cjump", "/cremove", "/cclear", "/cmove",
 		"/cspeed", "/creplay", "/cposition", "/cshuffle",
-		"/cloop", "/cqueue", "/creload",
+		"/cloop", "/cautoplay", "/cqueue", "/creload",
 		"/crestore",
 	}
 

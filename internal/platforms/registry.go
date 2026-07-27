@@ -132,29 +132,47 @@ func processURLs(urls []string, video bool) ([]*state.Track, []string) {
 
 	for _, url := range urls {
 		gologging.Info("Processing URL: " + url)
-		p := findPlatform(url)
-		if p == nil {
+		matched := false
+		resolved := false
+
+		// More than one platform can support a URL (for example YouTube and
+		// yt-dlp). Try each compatible platform in priority order, so a
+		// temporary metadata failure in the preferred resolver does not turn a
+		// valid URL into a misleading "no tracks found" response.
+		for _, p := range GetOrderedPlatforms() {
+			if !p.CanGetTracks(url) {
+				continue
+			}
+			matched = true
+
+			gologging.Debug("Matched platform [" + string(p.Name()) + "] for URL: " + url)
+			tracks, err := p.GetTracks(url, video)
+			if err != nil {
+				errMsg := string(p.Name()) + ": " + err.Error()
+				gologging.Warn("URL resolver failed; trying fallback: " + errMsg)
+				errs = append(errs, errMsg)
+				continue
+			}
+			if len(tracks) == 0 {
+				errMsg := string(p.Name()) + ": returned no tracks"
+				gologging.Warn("URL resolver returned an empty result; trying fallback: " + errMsg)
+				errs = append(errs, errMsg)
+				continue
+			}
+
+			gologging.Info("Tracks found: " + strconv.Itoa(len(tracks)))
+			allTracks = append(allTracks, tracks...)
+			resolved = true
+			break
+		}
+
+		if !matched {
 			errMsg := "No platform found for URL: " + url
 			gologging.Error(errMsg)
 			errs = append(errs, errMsg)
-			continue
+		} else if !resolved {
+			gologging.Warn("No URL resolver succeeded for: " + url)
 		}
-
-		gologging.Debug("Matched platform [" + string(p.Name()) + "] for URL: " + url)
-		tracks, err := p.GetTracks(url, video)
-		if err != nil {
-			if strings.Contains(err.Error(), "failed to extract metadata") {
-				gologging.Debug("Silent skip: metadata extraction failed for " + url)
-				continue
-			}
-			errMsg := string(p.Name()) + ": " + err.Error()
-			gologging.Error(errMsg)
-			errs = append(errs, errMsg)
-			continue
-		}
-
-		gologging.Info("Tracks found: " + strconv.Itoa(len(tracks)))
-		allTracks = append(allTracks, tracks...)
 	}
 	return allTracks, errs
 }

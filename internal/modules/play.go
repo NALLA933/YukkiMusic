@@ -258,7 +258,9 @@ func prepareRoomAndSearchMessage(
 		)
 	}
 
-	replyMsg, err := m.Reply(statusText)
+	replyMsg, err := m.Reply(statusText, &tg.SendOptions{
+		ReplyMarkup: core.GetCancelKeyboard(chatID, room),
+	})
 	if err != nil {
 		gologging.ErrorF("Failed to send searching message: %v", err)
 		return nil, nil, err
@@ -462,7 +464,7 @@ func playTracksAndRespond(
 
 		filePath := ""
 		if i == 0 && (!isActive || force) {
-			path, err := downloadFirstTrack(m, replyMsg, chatID, mention, track)
+			path, err := downloadFirstTrack(m, replyMsg, r, chatID, mention, track)
 			if err != nil {
 				return tg.ErrEndGroup
 			}
@@ -491,6 +493,7 @@ func playTracksAndRespond(
 func downloadFirstTrack(
 	m *tg.NewMessage,
 	replyMsg *tg.NewMessage,
+	r *core.RoomState,
 	chatID int64,
 	mention string,
 	track *state.Track,
@@ -498,7 +501,7 @@ func downloadFirstTrack(
 	title := utils.EscapeHTML(utils.ShortTitle(track.Title, 25))
 	var opt *tg.SendOptions
 	if track.Duration > 600 {
-		opt = &tg.SendOptions{ReplyMarkup: core.GetCancelKeyboard(chatID)}
+		opt = &tg.SendOptions{ReplyMarkup: core.GetCancelKeyboard(chatID, r)}
 	}
 
 	replyMsg, _ = utils.EOR(

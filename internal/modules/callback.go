@@ -52,6 +52,43 @@ func cancelHandler(cb *tg.CallbackQuery) error {
 	return tg.ErrEndGroup
 }
 
+// autoplayToggleCB is used on the search/download status panel, so users can
+// set the next-song behavior without sending a separate command.
+func autoplayToggleCB(cb *tg.CallbackQuery) error {
+	chatID := cb.ChannelID()
+	if !checkAdminOrAuth(cb, chatID) {
+		return tg.ErrEndGroup
+	}
+
+	parts := strings.SplitN(cb.DataString(), ":", 2)
+	if len(parts) != 2 {
+		cb.Answer(F(chatID, "invalid_request"), &tg.CallbackOptions{Alert: true})
+		return tg.ErrEndGroup
+	}
+	roomID, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || roomID == 0 {
+		cb.Answer(F(chatID, "room_not_active_cb"), &tg.CallbackOptions{Alert: true})
+		return tg.ErrEndGroup
+	}
+	r, ok := core.GetRoom(roomID, nil, false)
+	if !ok {
+		cb.Answer(F(chatID, "room_not_active_cb"), &tg.CallbackOptions{Alert: true})
+		return tg.ErrEndGroup
+	}
+
+	enabled := !autoplayEnabled(r)
+	r.SetData(autoplayDataKey, enabled)
+	state := F(chatID, "disabled")
+	if enabled {
+		state = F(chatID, "enabled")
+	}
+	cb.Answer(F(chatID, "autoplay_updated", locales.Arg{
+		"state": state,
+		"user":  utils.MentionHTML(cb.Sender),
+	}), &tg.CallbackOptions{Alert: true})
+	return tg.ErrEndGroup
+}
+
 func closeHandler(cb *tg.CallbackQuery) error {
 	cb.Answer("")
 	cb.Delete()
