@@ -183,7 +183,7 @@ func handleSkip(m *telegram.NewMessage, cplay bool) error {
 		return telegram.ErrEndGroup
 	}
 
-	rememberAutoplayTrack(r, t.ID)
+	rememberAutoplayTrack(r, t.ID, t.Title)
 
 	title := utils.ShortTitle(t.Title, 25)
 	safeTitle := utils.EscapeHTML(title)
@@ -230,8 +230,9 @@ func addAutoplayTrackForSkip(r *core.RoomState) bool {
 		return false
 	}
 
-	history := recentAutoplayTracks(r)
-	next, err := platforms.AutoplayTrack(current, history)
+	historyIDs := recentAutoplayTracks(r)
+	historyTitles := recentAutoplayTitles(r)
+	next, err := platforms.AutoplayTrack(current, historyIDs, historyTitles)
 	if err != nil {
 		gologging.WarnF("[skip] autoplay search failed for %s: %v", current.ID, err)
 		return false
