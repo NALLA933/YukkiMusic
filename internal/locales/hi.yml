@@ -817,6 +817,7 @@ shuffle_current_state: "🔀 इस वार्तालाप के लिए
 shuffle_updated: "🔀 {user} द्वारा यादृच्छिक क्रम <b>{state}</b> किया गया।"
 autoplay_current_state: "▶️ इस चैट में ऑटोप्ले अभी <b>{state}</b> है।\n\nबदलने के लिए <code>{cmd}</code> का प्रयोग करें।"
 autoplay_updated: "▶️ {user} द्वारा ऑटोप्ले <b>{state}</b> किया गया।"
+autoplay_updated_alert: "▶️ ऑटोप्ले {state} है।"
 autoplay_stopped_no_listeners: "⏹️ वॉइस चैट में assistant के अलावा कोई नहीं है, इसलिए ऑटोप्ले रोक दिया गया।"
 autoplay_help_entry: "<b>/autoplay</b> - कतार खत्म होने पर संबंधित गाने चलाता है। <code>/autoplay on</code> या <code>/autoplay off</code> का प्रयोग करें।"
 

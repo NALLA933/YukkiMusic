@@ -816,6 +816,7 @@ shuffle_current_state: "🔀 وضع الترتيب العشوائي حالياً
 shuffle_updated: "🔀 الترتيب العشوائي <b>{state}</b> بواسطة {user}."
 autoplay_current_state: "▶️ التشغيل التلقائي حالياً <b>{state}</b> لهذه المحادثة.\n\nاستخدم <code>{cmd}</code> لتغييره."
 autoplay_updated: "▶️ تم جعل التشغيل التلقائي <b>{state}</b> بواسطة {user}."
+autoplay_updated_alert: "▶️ التشغيل التلقائي {state}."
 autoplay_stopped_no_listeners: "⏹️ تم إيقاف التشغيل التلقائي لعدم وجود أي مستمع آخر في الدردشة الصوتية."
 autoplay_help_entry: "<b>/autoplay</b> - يشغّل مقاطع مشابهة عند انتهاء قائمة الانتظار. استخدم <code>/autoplay on</code> أو <code>/autoplay off</code>."
 

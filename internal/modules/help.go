@@ -107,6 +107,8 @@ func helpCallbackHandler(c *tg.CallbackQuery) error {
 		text = F(chatID, "help_main")
 		btn = core.GetHelpKeyboard(chatID)
 	}
+	text = strings.ReplaceAll(text, "<blockquote>", "")
+	text = strings.ReplaceAll(text, "</blockquote>", "")
 
 	c.Edit(text, &tg.SendOptions{ReplyMarkup: btn})
 	return tg.ErrEndGroup

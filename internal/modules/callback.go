@@ -133,7 +133,11 @@ func roomHandle(cb *tg.CallbackQuery) error {
 func handleAutoplayAction(cb *tg.CallbackQuery, r *core.RoomState) error {
 	chatID := cb.ChannelID()
 	enabled := !autoplayEnabled(r)
-	r.SetData(autoplayDataKey, enabled)
+	if err := setAutoplay(r, enabled); err != nil {
+		gologging.ErrorF("failed to save autoplay setting for %d: %v", r.ID, err)
+		cb.Answer(F(chatID, "generic_error", locales.Arg{"error": err.Error()}), &tg.CallbackOptions{Alert: true})
+		return tg.ErrEndGroup
+	}
 
 	state := F(chatID, "disabled")
 	if enabled {
@@ -148,10 +152,7 @@ func handleAutoplayAction(cb *tg.CallbackQuery, r *core.RoomState) error {
 		})
 	}
 
-	cb.Answer(F(chatID, "autoplay_updated", locales.Arg{
-		"state": state,
-		"user":  utils.MentionHTML(cb.Sender),
-	}), &tg.CallbackOptions{Alert: true})
+	cb.Answer(F(chatID, "autoplay_updated_alert", locales.Arg{"state": state}), &tg.CallbackOptions{Alert: true})
 	return tg.ErrEndGroup
 }
 

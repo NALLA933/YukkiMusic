@@ -53,6 +53,11 @@ func getEffectiveRoom(m *tg.NewMessage, cplay bool) (*core.RoomState, error) {
 		return nil, fmt.Errorf("failed to get assistant for your chat: %w", err)
 	}
 	r, _ := core.GetRoom(chatID, ass, true)
+	if autoplay, err := database.AutoplayEnabled(chatID); err != nil {
+		gologging.ErrorF("failed to load autoplay setting for %d: %v", chatID, err)
+	} else {
+		r.SetData(autoplayDataKey, autoplay)
+	}
 
 	if cplay {
 		r.ChatID = m.ChannelID()
