@@ -267,6 +267,28 @@ func (p *YouTubePlatform) VideoSearch(
 	return tracks, nil
 }
 
+// AutoplayTrack returns a different YouTube result for a completed track.
+// Search results are used as a reliable fallback for sources that do not expose
+// a native related-videos feed.
+func AutoplayTrack(current *state.Track) (*state.Track, error) {
+	if current == nil || strings.TrimSpace(current.Title) == "" {
+		return nil, errors.New("current track has no title")
+	}
+
+	results, err := yt.VideoSearch(current.Title, false)
+	if err != nil {
+		return nil, err
+	}
+	for _, track := range results {
+		if track != nil && track.ID != current.ID {
+			track.Video = current.Video
+			track.Requester = "Autoplay"
+			return track, nil
+		}
+	}
+	return nil, errors.New("no alternative autoplay result found")
+}
+
 func (p *YouTubePlatform) extractPlaylistID(input string) string {
 	m0 := playlistIDRe1.FindStringSubmatch(input)
 	if len(m0) > 1 {
@@ -634,4 +656,3 @@ func atoi(s string) int {
 	}
 	return n
 }
-

@@ -68,12 +68,38 @@ func streamEndHandler(
 	var t *state.Track
 	var wasLooping bool
 	if len(r.Queue()) == 0 && r.Loop() == 0 {
-		core.DeleteRoom(chatID)
-		core.Bot.SendMessage(cid, F(cid, "stream_queue_finished"))
-		return
+		if current := r.Track(); autoplayEnabled(r) && current != nil {
+			if !hasAutoplayListener(r) {
+				r.SetData(autoplayDataKey, false)
+				core.DeleteRoom(chatID)
+				core.Bot.SendMessage(cid, F(cid, "autoplay_stopped_no_listeners"))
+				return
+			}
+
+			var autoplayErr error
+			t, autoplayErr = platforms.AutoplayTrack(current)
+			if autoplayErr != nil {
+				gologging.ErrorF("[onStreamEndHandler] Autoplay search failed: %v", autoplayErr)
+				core.DeleteRoom(chatID)
+				core.Bot.SendMessage(cid, F(cid, "stream_queue_finished"))
+				return
+			}
+			r.AddTracksToQueue([]*state.Track{t})
+			t = r.NextTrack()
+		} else {
+			core.DeleteRoom(chatID)
+			core.Bot.SendMessage(cid, F(cid, "stream_queue_finished"))
+			return
+		}
 	} else {
 		wasLooping = r.Loop() > 0
 		t = r.NextTrack()
+	}
+
+	if t == nil {
+		core.DeleteRoom(chatID)
+		core.Bot.SendMessage(cid, F(cid, "stream_queue_finished"))
+		return
 	}
 
 	statusText := F(cid, "stream_downloading_next")
