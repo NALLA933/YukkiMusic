@@ -272,25 +272,28 @@ func (p *YouTubePlatform) VideoSearch(
 // Search results are used as a reliable fallback for sources that do not expose
 // a native related-videos feed.
 //
-// history holds the IDs of tracks that were played recently (see
-// modules.recentAutoplayTracks); any track whose ID appears in it, or which
-// matches the track that was just played, is skipped so autoplay does not
-// loop back to a song that was already played a moment ago.
-func AutoplayTrack(current *state.Track, history []string) (*state.Track, error) {
+// historyIDs/historyTitles hold the IDs and titles of tracks that were
+// played recently (see modules.recentAutoplayTracks / recentAutoplayTitles).
+// A candidate is rejected if its ID matches the history, or if its title is
+// recognised as just another upload of a song that already played — e.g. a
+// "(Lyrics)", "(Slowed + Reverb)", or "(Official Video)" version of the same
+// song — since that would still feel like the same song playing again.
+func AutoplayTrack(current *state.Track, historyIDs, historyTitles []string) (*state.Track, error) {
 	if current == nil || strings.TrimSpace(current.Title) == "" {
 		return nil, errors.New("current track has no title")
 	}
 
-	excluded := autoplayExcludeSet(current.ID, history)
+	excludedIDs := autoplayExcludeSet(current.ID, historyIDs)
+	excludedTitles := append([]string{current.Title}, historyTitles...)
 
 	if current.Source == PlatformSpotify {
-		if track, err := spotifyAutoplayTrack(current, excluded); err == nil {
+		if track, err := spotifyAutoplayTrack(current, excludedIDs, excludedTitles); err == nil {
 			return track, nil
 		}
 	}
 
 	if videoID := yt.extractVideoID(current.URL); videoID != "" {
-		if track, err := yt.relatedTrack(videoID, current, excluded); err == nil {
+		if track, err := yt.relatedTrack(videoID, current, excludedIDs, excludedTitles); err == nil {
 			return track, nil
 		}
 	}
@@ -302,9 +305,13 @@ func AutoplayTrack(current *state.Track, history []string) (*state.Track, error)
 
 	var candidates []*state.Track
 	for _, track := range results {
-		if track != nil && !excluded[track.ID] {
-			candidates = append(candidates, track)
+		if track == nil || excludedIDs[track.ID] {
+			continue
 		}
+		if isDuplicateSongTitle(track.Title, excludedTitles) {
+			continue
+		}
+		candidates = append(candidates, track)
 	}
 	if len(candidates) == 0 {
 		return nil, errors.New("no alternative autoplay result found")
@@ -330,13 +337,131 @@ func autoplayExcludeSet(currentID string, history []string) map[string]bool {
 	return set
 }
 
+// --- Same-song / different-upload detection ---------------------------------
+//
+// YouTube frequently has many separate uploads of the exact same song: the
+// official video, a lyric video, an "8D audio" edit, a "Slowed + Reverb"
+// remix, a 1-hour loop, etc. Each has a different video ID, so ID-based
+// deduplication alone lets autoplay bounce between these "different
+// versions" of one song and feel broken. normalizeSongTitle strips that
+// upload-specific noise so the underlying song name can be compared.
+
+var (
+	titleBracketNoiseRe = regexp.MustCompile(`\((?:[^()]*)\)|\[(?:[^\[\]]*)\]|\{(?:[^{}]*)\}`)
+	titleFeatRe          = regexp.MustCompile(`(?i)\b(feat\.?|ft\.?|featuring)\b.*$`)
+	titleNoiseWordsRe    = regexp.MustCompile(`(?i)\b(official( music)?( video| audio)?|music video|lyrics?( video)?|lyric video|visuali[sz]er|slowed( and | \+ )?reverb|slowed|reverb|nightcore|8d audio|8d|remix|remaster(ed)?|re[- ]?upload|cover|acoustic|unplugged|live( version| performance)?|hd|4k|1080p|720p|full( song| video| track)?|video song|audio( only)?|explicit|clean( version)?|radio edit|extended( mix)?|instrumental|karaoke|mp3|male version|female version|reprise|bass boosted|amv|edit|hq|version)\b`)
+	titleNonAlnumRe      = regexp.MustCompile(`[^a-z0-9 ]+`)
+	titleSpaceRe         = regexp.MustCompile(`\s+`)
+)
+
+// normalizeSongTitle reduces a track title to just the underlying song name,
+// stripping upload-specific tags, bracketed noise, and punctuation.
+func normalizeSongTitle(title string) string {
+	t := strings.ToLower(title)
+	t = titleBracketNoiseRe.ReplaceAllString(t, " ")
+	t = titleFeatRe.ReplaceAllString(t, " ")
+	t = titleNoiseWordsRe.ReplaceAllString(t, " ")
+	t = titleNonAlnumRe.ReplaceAllString(t, " ")
+	t = titleSpaceRe.ReplaceAllString(t, " ")
+	return strings.TrimSpace(t)
+}
+
+// isSameSong reports whether two titles are almost certainly different
+// uploads of the same underlying song, after stripping upload-noise.
+func isSameSong(a, b string) bool {
+	na, nb := normalizeSongTitle(a), normalizeSongTitle(b)
+	if na == "" || nb == "" {
+		return false
+	}
+	if na == nb {
+		return true
+	}
+
+	shorter, longer := na, nb
+	if len(longer) < len(shorter) {
+		shorter, longer = longer, shorter
+	}
+	// e.g. "tum hi ho" fully contained inside "tum hi ho unplugged version"
+	if strings.Contains(longer, shorter) && float64(len(shorter))/float64(len(longer)) > 0.6 {
+		return true
+	}
+
+	return titleSimilarity(na, nb) > 0.85
+}
+
+// isDuplicateSongTitle reports whether title matches any of excludedTitles
+// closely enough to be considered the same underlying song.
+func isDuplicateSongTitle(title string, excludedTitles []string) bool {
+	for _, other := range excludedTitles {
+		if isSameSong(title, other) {
+			return true
+		}
+	}
+	return false
+}
+
+// titleSimilarity returns a 0..1 similarity ratio based on edit distance.
+func titleSimilarity(a, b string) float64 {
+	if a == b {
+		return 1
+	}
+	maxLen := len(a)
+	if len(b) > maxLen {
+		maxLen = len(b)
+	}
+	if maxLen == 0 {
+		return 1
+	}
+	return 1 - float64(levenshteinDistance(a, b))/float64(maxLen)
+}
+
+// levenshteinDistance computes the classic edit distance between two strings.
+func levenshteinDistance(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	la, lb := len(ra), len(rb)
+	if la == 0 {
+		return lb
+	}
+	if lb == 0 {
+		return la
+	}
+
+	prev := make([]int, lb+1)
+	curr := make([]int, lb+1)
+	for j := 0; j <= lb; j++ {
+		prev[j] = j
+	}
+
+	for i := 1; i <= la; i++ {
+		curr[0] = i
+		for j := 1; j <= lb; j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			del := prev[j] + 1
+			ins := curr[j-1] + 1
+			sub := prev[j-1] + cost
+			min := del
+			if ins < min {
+				min = ins
+			}
+			if sub < min {
+				min = sub
+			}
+			curr[j] = min
+		}
+		prev, curr = curr, prev
+	}
+	return prev[lb]
+}
+
 // relatedTrack asks YouTube's next endpoint for actual related videos. It is
 // the same recommendation source that powers YouTube's own Up next results.
-// It picks randomly among the eligible related videos (those not in
-// excluded) instead of always returning the first one, so consecutive
-// autoplay calls for the same seed track do not keep producing the same
-// "next" song.
-func (p *YouTubePlatform) relatedTrack(videoID string, current *state.Track, excluded map[string]bool) (*state.Track, error) {
+// It picks randomly among the eligible related videos (those not excluded
+// by ID or recognised as the same underlying song) instead of always
+// returning the first one.
+func (p *YouTubePlatform) relatedTrack(videoID string, current *state.Track, excludedIDs map[string]bool, excludedTitles []string) (*state.Track, error) {
 	var result map[string]any
 	payload := map[string]any{
 		"context": map[string]any{
@@ -356,7 +481,10 @@ func (p *YouTubePlatform) relatedTrack(videoID string, current *state.Track, exc
 
 	var candidates []*state.Track
 	for _, track := range tracks {
-		if track == nil || track.ID == videoID || excluded[track.ID] {
+		if track == nil || track.ID == videoID || excludedIDs[track.ID] {
+			continue
+		}
+		if isDuplicateSongTitle(track.Title, excludedTitles) {
 			continue
 		}
 		candidates = append(candidates, track)
