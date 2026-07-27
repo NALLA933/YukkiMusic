@@ -377,10 +377,12 @@ func (s *SpotifyPlatform) convertSpotifyTrack(
 // spotifyAutoplayTrack retrieves Spotify's own recommendation for a played
 // Spotify track. Playback still uses the existing Spotify-to-YouTube downloader.
 //
-// excluded contains the IDs that must not be picked again: the track that
-// was just played plus any track still in the recent-autoplay history. This
-// stops autoplay from bouncing back to the same recommendation every time.
-func spotifyAutoplayTrack(current *state.Track, excluded map[string]bool) (*state.Track, error) {
+// excludedIDs contains the IDs that must not be picked again: the track that
+// was just played plus any track still in the recent-autoplay history.
+// excludedTitles additionally filters out recommendations that are really
+// just a different edition (remaster, radio edit, etc.) of a song already
+// played, using the same title comparison as the YouTube path.
+func spotifyAutoplayTrack(current *state.Track, excludedIDs map[string]bool, excludedTitles []string) (*state.Track, error) {
 	if current == nil || current.ID == "" {
 		return nil, errors.New("invalid Spotify track")
 	}
@@ -400,7 +402,10 @@ func spotifyAutoplayTrack(current *state.Track, excluded map[string]bool) (*stat
 
 	var candidates []spotify.SimpleTrack
 	for _, recommendation := range recommendations.Tracks {
-		if excluded[string(recommendation.ID)] {
+		if excludedIDs[string(recommendation.ID)] {
+			continue
+		}
+		if isDuplicateSongTitle(recommendation.Name, excludedTitles) {
 			continue
 		}
 		candidates = append(candidates, recommendation)
