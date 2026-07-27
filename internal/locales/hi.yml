@@ -8,6 +8,8 @@ ADD_ME_BTN: "⚡ मुझे अपने समूह में जोड़�
 BROADCAST_CANCEL_BTN: "🚫 प्रसारण रद्द करें"
 CLOSE_BTN: "बन्द करें"
 DOWNLOAD_CANCEL_BTN: "🚦 डाउनलोड रद्द करें"
+AUTOPLAY_ON_BTN: "▶️ ऑटोप्ले: चालू"
+AUTOPLAY_OFF_BTN: "▶️ ऑटोप्ले: बंद"
 GC_HELP_BTN: "📒 आदेश"
 
 START_HELP_BTN: "❓ सहायता एवं आदेश"
@@ -813,6 +815,10 @@ stopped: "⏹️ <b>संगीत बन्द किया गया और �
 
 shuffle_current_state: "🔀 इस वार्तालाप के लिए वर्तमान में यादृच्छिक क्रम <b>{state}</b> है।\n\nइसे बदलने के लिए <code>{cmd}</code> का प्रयोग करें।"
 shuffle_updated: "🔀 {user} द्वारा यादृच्छिक क्रम <b>{state}</b> किया गया।"
+autoplay_current_state: "▶️ इस चैट में ऑटोप्ले अभी <b>{state}</b> है।\n\nबदलने के लिए <code>{cmd}</code> का प्रयोग करें।"
+autoplay_updated: "▶️ {user} द्वारा ऑटोप्ले <b>{state}</b> किया गया।"
+autoplay_stopped_no_listeners: "⏹️ वॉइस चैट में assistant के अलावा कोई नहीं है, इसलिए ऑटोप्ले रोक दिया गया।"
+autoplay_help_entry: "<b>/autoplay</b> - कतार खत्म होने पर संबंधित गाने चलाता है। <code>/autoplay on</code> या <code>/autoplay off</code> का प्रयोग करें।"
 
 skip_stopped: "⏹️ संगीत बन्द। प्रतीक्षा सूची रिक्त है।\nछोड़ने वाला: {user}"
 skip_invalid_number: "⚠️ कृपया /skip के बाद मान्य संख्या दें।\nउदाहरण: <code>/skip 3</code>"
