@@ -77,8 +77,9 @@ func streamEndHandler(
 			}
 
 			var autoplayErr error
-			history := recentAutoplayTracks(r)
-			t, autoplayErr = platforms.AutoplayTrack(current, history)
+			historyIDs := recentAutoplayTracks(r)
+			historyTitles := recentAutoplayTitles(r)
+			t, autoplayErr = platforms.AutoplayTrack(current, historyIDs, historyTitles)
 			if autoplayErr != nil {
 				gologging.ErrorF("[onStreamEndHandler] Autoplay search failed: %v", autoplayErr)
 				core.DeleteRoom(chatID)
@@ -149,7 +150,7 @@ func streamEndHandler(
 		return
 	}
 
-	rememberAutoplayTrack(r, t.ID)
+	rememberAutoplayTrack(r, t.ID, t.Title)
 
 	title := utils.ShortTitle(t.Title, 25)
 	safeTitle := utils.EscapeHTML(title)
