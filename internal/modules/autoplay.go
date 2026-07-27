@@ -19,6 +19,15 @@ import (
 
 const autoplayDataKey = "autoplay"
 
+// recentTracksDataKey stores the IDs of the last few tracks that autoplay
+// has played in a room, so the same song is never picked again too soon.
+const recentTracksDataKey = "autoplay_recent"
+
+// maxAutoplayHistory is how many recently played track IDs we remember.
+// Once the list grows past this size, the oldest entries are dropped
+// automatically (see rememberAutoplayTrack).
+const maxAutoplayHistory = 10
+
 func init() {
 	helpTexts["/autoplay"] = `<i>Continue playback automatically when the queue ends.</i>
 
@@ -105,6 +114,44 @@ func setAutoplay(r *core.RoomState, enabled bool) error {
 	}
 	r.SetData(autoplayDataKey, enabled)
 	return nil
+}
+
+// recentAutoplayTracks returns the IDs of the tracks autoplay has played
+// most recently in this room (oldest first, newest last). Autoplay uses
+// this list to avoid selecting a song that already played recently.
+func recentAutoplayTracks(r *core.RoomState) []string {
+	ok, value := r.GetData(recentTracksDataKey)
+	if !ok {
+		return nil
+	}
+	history, isSlice := value.([]string)
+	if !isSlice {
+		return nil
+	}
+	return history
+}
+
+// rememberAutoplayTrack records that a track was just played by autoplay.
+// It keeps only the most recent maxAutoplayHistory entries: once the list
+// is full, the oldest track ID is automatically dropped (FIFO), so the
+// history never grows unbounded and old songs become eligible again.
+func rememberAutoplayTrack(r *core.RoomState, trackID string) {
+	if trackID == "" {
+		return
+	}
+
+	history := recentAutoplayTracks(r)
+	for _, id := range history {
+		if id == trackID {
+			return // already the most recent history, nothing to do
+		}
+	}
+
+	history = append(history, trackID)
+	if len(history) > maxAutoplayHistory {
+		history = history[len(history)-maxAutoplayHistory:]
+	}
+	r.SetData(recentTracksDataKey, history)
 }
 
 // hasAutoplayListener reports whether somebody other than the active assistant
