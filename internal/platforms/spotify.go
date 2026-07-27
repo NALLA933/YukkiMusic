@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"strings"
 	"sync"
@@ -375,7 +376,11 @@ func (s *SpotifyPlatform) convertSpotifyTrack(
 
 // spotifyAutoplayTrack retrieves Spotify's own recommendation for a played
 // Spotify track. Playback still uses the existing Spotify-to-YouTube downloader.
-func spotifyAutoplayTrack(current *state.Track) (*state.Track, error) {
+//
+// excluded contains the IDs that must not be picked again: the track that
+// was just played plus any track still in the recent-autoplay history. This
+// stops autoplay from bouncing back to the same recommendation every time.
+func spotifyAutoplayTrack(current *state.Track, excluded map[string]bool) (*state.Track, error) {
 	if current == nil || current.ID == "" {
 		return nil, errors.New("invalid Spotify track")
 	}
@@ -392,16 +397,23 @@ func spotifyAutoplayTrack(current *state.Track) (*state.Track, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get Spotify recommendations: %w", err)
 	}
+
+	var candidates []spotify.SimpleTrack
 	for _, recommendation := range recommendations.Tracks {
-		if string(recommendation.ID) == current.ID {
+		if excluded[string(recommendation.ID)] {
 			continue
 		}
-		track := spotifyPlatform.convertSpotifyTrack(&recommendation, nil)
-		track.Video = current.Video
-		track.Requester = "Autoplay"
-		return track, nil
+		candidates = append(candidates, recommendation)
 	}
-	return nil, errors.New("no Spotify recommendation found")
+	if len(candidates) == 0 {
+		return nil, errors.New("no Spotify recommendation found")
+	}
+
+	chosen := candidates[rand.Intn(len(candidates))]
+	track := spotifyPlatform.convertSpotifyTrack(&chosen, nil)
+	track.Video = current.Video
+	track.Requester = "Autoplay"
+	return track, nil
 }
 
 func updateVideoFlag(tracks []*state.Track, video bool) []*state.Track {
