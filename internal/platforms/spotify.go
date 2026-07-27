@@ -60,16 +60,15 @@ var (
 	spotifyLinkRegex = regexp.MustCompile(
 		`(?i)^(https?:\/\/)?(open\.)?spotify\.com\/`,
 	)
-	nameCleanupRe = regexp.MustCompile(`[\(\[].*?[\)\]]`)
-	spotifyCache  = utils.NewCache[string, []*state.Track](1 * time.Hour)
+	nameCleanupRe   = regexp.MustCompile(`[\(\[].*?[\)\]]`)
+	spotifyCache    = utils.NewCache[string, []*state.Track](1 * time.Hour)
+	spotifyPlatform = &SpotifyPlatform{name: PlatformSpotify}
 )
 
 const PlatformSpotify state.PlatformName = "Spotify"
 
 func init() {
-	Register(95, &SpotifyPlatform{
-		name: PlatformSpotify,
-	})
+	Register(95, spotifyPlatform)
 }
 
 func (s *SpotifyPlatform) Name() state.PlatformName {
@@ -372,6 +371,37 @@ func (s *SpotifyPlatform) convertSpotifyTrack(
 	}
 
 	return track
+}
+
+// spotifyAutoplayTrack retrieves Spotify's own recommendation for a played
+// Spotify track. Playback still uses the existing Spotify-to-YouTube downloader.
+func spotifyAutoplayTrack(current *state.Track) (*state.Track, error) {
+	if current == nil || current.ID == "" {
+		return nil, errors.New("invalid Spotify track")
+	}
+	if err := spotifyPlatform.ensureClient(); err != nil {
+		return nil, err
+	}
+
+	recommendations, err := spotifyPlatform.client.GetRecommendations(
+		context.Background(),
+		spotify.Seeds{Tracks: []spotify.ID{spotify.ID(current.ID)}},
+		nil,
+		spotify.Limit(10),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get Spotify recommendations: %w", err)
+	}
+	for _, recommendation := range recommendations.Tracks {
+		if string(recommendation.ID) == current.ID {
+			continue
+		}
+		track := spotifyPlatform.convertSpotifyTrack(&recommendation, nil)
+		track.Video = current.Video
+		track.Requester = "Autoplay"
+		return track, nil
+	}
+	return nil, errors.New("no Spotify recommendation found")
 }
 
 func updateVideoFlag(tracks []*state.Track, video bool) []*state.Track {
