@@ -25,6 +25,7 @@ import (
 	"github.com/amarnathcjd/gogram/telegram"
 
 	"main/internal/core"
+	state "main/internal/core/models"
 	"main/internal/locales"
 	"main/internal/platforms"
 	"main/internal/utils"
@@ -99,7 +100,7 @@ func handleSkip(m *telegram.NewMessage, cplay bool) error {
 		skipCount = parsed + 1
 	}
 
-	if len(r.Queue()) == 0 {
+	if len(r.Queue()) == 0 && !addAutoplayTrackForSkip(r) {
 
 		scheduleOldPlayingMessage(r)
 		core.DeleteRoom(r.ID)
@@ -112,7 +113,7 @@ func handleSkip(m *telegram.NewMessage, cplay bool) error {
 	r.SetLoop(0)
 
 	for i := 1; i < skipCount; i++ {
-		if len(r.Queue()) == 0 {
+		if len(r.Queue()) == 0 && !addAutoplayTrackForSkip(r) {
 
 			scheduleOldPlayingMessage(r)
 			core.DeleteRoom(r.ID)
@@ -124,7 +125,7 @@ func handleSkip(m *telegram.NewMessage, cplay bool) error {
 		_ = r.NextTrack()
 	}
 
-	if len(r.Queue()) == 0 {
+	if len(r.Queue()) == 0 && !addAutoplayTrackForSkip(r) {
 
 		scheduleOldPlayingMessage(r)
 		core.DeleteRoom(r.ID)
@@ -213,4 +214,24 @@ func handleSkip(m *telegram.NewMessage, cplay bool) error {
 	}
 
 	return telegram.ErrEndGroup
+}
+
+// addAutoplayTrackForSkip makes /skip continue with a recommended track when
+// the manual queue is empty and autoplay is enabled for this chat.
+func addAutoplayTrackForSkip(r *core.RoomState) bool {
+	if !autoplayEnabled(r) || !hasAutoplayListener(r) {
+		return false
+	}
+
+	current := r.Track()
+	if current == nil {
+		return false
+	}
+	next, err := platforms.AutoplayTrack(current)
+	if err != nil {
+		gologging.WarnF("[skip] autoplay search failed for %s: %v", current.ID, err)
+		return false
+	}
+	r.AddTracksToQueue([]*state.Track{next})
+	return true
 }

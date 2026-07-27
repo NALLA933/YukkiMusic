@@ -274,6 +274,17 @@ func AutoplayTrack(current *state.Track) (*state.Track, error) {
 	if current == nil || strings.TrimSpace(current.Title) == "" {
 		return nil, errors.New("current track has no title")
 	}
+	if current.Source == PlatformSpotify {
+		if track, err := spotifyAutoplayTrack(current); err == nil {
+			return track, nil
+		}
+	}
+
+	if videoID := yt.extractVideoID(current.URL); videoID != "" {
+		if track, err := yt.relatedTrack(videoID, current); err == nil {
+			return track, nil
+		}
+	}
 
 	results, err := yt.VideoSearch(current.Title, false)
 	if err != nil {
@@ -287,6 +298,36 @@ func AutoplayTrack(current *state.Track) (*state.Track, error) {
 		}
 	}
 	return nil, errors.New("no alternative autoplay result found")
+}
+
+// relatedTrack asks YouTube's next endpoint for actual related videos. It is
+// the same recommendation source that powers YouTube's own Up next results.
+func (p *YouTubePlatform) relatedTrack(videoID string, current *state.Track) (*state.Track, error) {
+	var result map[string]any
+	payload := map[string]any{
+		"context": map[string]any{
+			"client": map[string]any{
+				"clientName":    innerTubeClientName,
+				"clientVersion": innerTubeClientVersion,
+			},
+		},
+		"videoId": videoID,
+	}
+	if err := p.callInnerTube("next", payload, &result); err != nil {
+		return nil, err
+	}
+
+	var tracks []*state.Track
+	p.parseNodes(result, &tracks, config.QueueLimit, "compactVideoRenderer")
+	for _, track := range tracks {
+		if track == nil || track.ID == current.ID || track.ID == videoID {
+			continue
+		}
+		track.Video = current.Video
+		track.Requester = "Autoplay"
+		return track, nil
+	}
+	return nil, errors.New("no related YouTube track found")
 }
 
 func (p *YouTubePlatform) extractPlaylistID(input string) string {
@@ -541,6 +582,9 @@ func (p *YouTubePlatform) parseNodes(
 			}
 
 			title := safeString(dig(vid, "title", "runs", 0, "text"))
+			if title == "" {
+				title = safeString(dig(vid, "title", "simpleText"))
+			}
 			thumb := getThumbnailURL(vid)
 			durationText := safeString(dig(vid, "lengthText", "simpleText"))
 			if durationText == "" {
