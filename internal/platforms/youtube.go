@@ -308,6 +308,9 @@ func AutoplayTrack(current *state.Track, historyIDs, historyTitles []string) (*s
 		if track == nil || excludedIDs[track.ID] {
 			continue
 		}
+		if track.Duration > 0 && track.Duration <= 60 {
+			continue // skip YouTube Shorts
+		}
 		if isDuplicateSongTitle(track.Title, excludedTitles) {
 			continue
 		}
@@ -483,6 +486,9 @@ func (p *YouTubePlatform) relatedTrack(videoID string, current *state.Track, exc
 	for _, track := range tracks {
 		if track == nil || track.ID == videoID || excludedIDs[track.ID] {
 			continue
+		}
+		if track.Duration > 0 && track.Duration <= 60 {
+			continue // skip YouTube Shorts
 		}
 		if isDuplicateSongTitle(track.Title, excludedTitles) {
 			continue
