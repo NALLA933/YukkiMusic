@@ -157,11 +157,38 @@ func roomHandle(cb *tg.CallbackQuery) error {
 		return handleMuteAction(cb, r)
 	case action == "unmute":
 		return handleUnmuteAction(cb, r)
+	case action == "autoplay":
+		return handleAutoplayAction(cb, r)
 	default:
 		gologging.WarnF("Unknown callback action: %s", action)
 		cb.Answer(F(chatID, "unknown_action"), opt)
 	}
 
+	return tg.ErrEndGroup
+}
+
+func handleAutoplayAction(cb *tg.CallbackQuery, r *core.RoomState) error {
+	chatID := cb.ChannelID()
+	enabled := !autoplayEnabled(r)
+	r.SetData(autoplayDataKey, enabled)
+
+	state := F(chatID, "disabled")
+	if enabled {
+		state = F(chatID, "enabled")
+	}
+
+	// Refresh the same Now Playing message so the button immediately shows the
+	// new on/off state without changing the displayed track details.
+	if message, err := cb.GetMessage(); err == nil {
+		_, _ = cb.Edit(message, &tg.SendOptions{
+			ReplyMarkup: core.GetPlayMarkup(chatID, r, false),
+		})
+	}
+
+	cb.Answer(F(chatID, "autoplay_updated", locales.Arg{
+		"state": state,
+		"user":  utils.MentionHTML(cb.Sender),
+	}), &tg.CallbackOptions{Alert: true})
 	return tg.ErrEndGroup
 }
 

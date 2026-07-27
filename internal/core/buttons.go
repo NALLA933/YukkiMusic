@@ -156,7 +156,12 @@ func GetPlayMarkup(chatID int64, r *RoomState, queued bool) tg.ReplyMarkup {
 		tg.Button.Data("15s ↪", prefix+"seek_15"),
 	)
 
+	autoplayLabel := F(chatID, "AUTOPLAY_OFF_BTN")
+	if ok, enabled := r.GetData("autoplay"); ok && enabled == true {
+		autoplayLabel = F(chatID, "AUTOPLAY_ON_BTN")
+	}
 	btn.AddRow(
+		tg.Button.Data(autoplayLabel, prefix+"autoplay"),
 		tg.Button.Data(F(chatID, "CLOSE_BTN"), "close"),
 	)
 
