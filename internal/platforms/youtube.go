@@ -351,10 +351,10 @@ func autoplayExcludeSet(currentID string, history []string) map[string]bool {
 
 var (
 	titleBracketNoiseRe = regexp.MustCompile(`\((?:[^()]*)\)|\[(?:[^\[\]]*)\]|\{(?:[^{}]*)\}`)
-	titleFeatRe          = regexp.MustCompile(`(?i)\b(feat\.?|ft\.?|featuring)\b.*$`)
-	titleNoiseWordsRe    = regexp.MustCompile(`(?i)\b(official( music)?( video| audio)?|music video|lyrics?( video)?|lyric video|visuali[sz]er|slowed( and | \+ )?reverb|slowed|reverb|nightcore|8d audio|8d|remix|remaster(ed)?|re[- ]?upload|cover|acoustic|unplugged|live( version| performance)?|hd|4k|1080p|720p|full( song| video| track)?|video song|audio( only)?|explicit|clean( version)?|radio edit|extended( mix)?|instrumental|karaoke|mp3|male version|female version|reprise|bass boosted|amv|edit|hq|version)\b`)
-	titleNonAlnumRe      = regexp.MustCompile(`[^a-z0-9 ]+`)
-	titleSpaceRe         = regexp.MustCompile(`\s+`)
+	titleFeatRe         = regexp.MustCompile(`(?i)\b(feat\.?|ft\.?|featuring)\b.*$`)
+	titleNoiseWordsRe   = regexp.MustCompile(`(?i)\b(official( music)?( video| audio)?|music video|lyrics?( video)?|lyric video|visuali[sz]er|slowed( and | \+ )?reverb|slowed|reverb|nightcore|8d audio|8d|remix|remaster(ed)?|re[- ]?upload|cover|acoustic|unplugged|live( version| performance)?|hd|4k|1080p|720p|full( song| video| track)?|video song|audio( only)?|explicit|clean( version)?|radio edit|extended( mix)?|instrumental|karaoke|mp3|male version|female version|reprise|bass boosted|amv|edit|hq|version)\b`)
+	titleNonAlnumRe     = regexp.MustCompile(`[^a-z0-9 ]+`)
+	titleSpaceRe        = regexp.MustCompile(`\s+`)
 )
 
 // normalizeSongTitle reduces a track title to just the underlying song name,
@@ -367,6 +367,29 @@ func normalizeSongTitle(title string) string {
 	t = titleNonAlnumRe.ReplaceAllString(t, " ")
 	t = titleSpaceRe.ReplaceAllString(t, " ")
 	return strings.TrimSpace(t)
+}
+
+// coreTitleSeparators mark where a title moves from "the song's own name"
+// into artist/uploader/version-specific text — e.g. "Ishq - Faheem
+// Abdullah", "Kesariya (Arijit Singh)", "Ishq ft. XYZ". Whatever comes
+// before the earliest of these is treated as the song's core name.
+var coreTitleSeparators = []string{" - ", " – ", " — ", " | ", "(", "[", " ft.", " ft ", " feat.", " feat "}
+
+// extractCoreSongTitle returns the leading portion of a title before the
+// first artist/version separator, normalized the same way as
+// normalizeSongTitle. Different uploads of the same song (official video,
+// a remix, a "slowed + reverb" edit, a cover by another channel) usually
+// keep this leading segment identical even when everything after it is
+// completely different, so it's a strong same-song signal on its own.
+func extractCoreSongTitle(title string) string {
+	lower := strings.ToLower(title)
+	cut := len(lower)
+	for _, sep := range coreTitleSeparators {
+		if idx := strings.Index(lower, sep); idx != -1 && idx < cut {
+			cut = idx
+		}
+	}
+	return normalizeSongTitle(title[:cut])
 }
 
 // isSameSong reports whether two titles are almost certainly different
@@ -389,7 +412,27 @@ func isSameSong(a, b string) bool {
 		return true
 	}
 
-	return titleSimilarity(na, nb) > 0.85
+	if titleSimilarity(na, nb) > 0.85 {
+		return true
+	}
+
+	// Different uploaders often format everything AFTER the song name
+	// completely differently — "Ishq - Faheem Abdullah, Rauhan Malik" vs
+	// "Ishq (Slowed + Reverb) - Bass Boosted Nation" — which tanks
+	// whole-title similarity even though it's the same song. Comparing just
+	// the leading "core" segment (before the first separator/parenthesis/
+	// feat.) catches this without needing the rest of the title to match.
+	ca, cb := extractCoreSongTitle(a), extractCoreSongTitle(b)
+	if len(ca) >= 4 && len(cb) >= 4 {
+		if ca == cb {
+			return true
+		}
+		if len(ca) >= 6 && len(cb) >= 6 && titleSimilarity(ca, cb) > 0.8 {
+			return true
+		}
+	}
+
+	return false
 }
 
 // isDuplicateSongTitle reports whether title matches any of excludedTitles
