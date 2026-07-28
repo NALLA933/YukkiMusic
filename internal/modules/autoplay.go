@@ -6,14 +6,19 @@
 package modules
 
 import (
+	"context"
+	"os"
 	"strings"
+	"sync"
 
 	"github.com/Laky-64/gologging"
 	"github.com/amarnathcjd/gogram/telegram"
 
 	"main/internal/core"
+	state "main/internal/core/models"
 	"main/internal/database"
 	"main/internal/locales"
+	"main/internal/platforms"
 	"main/internal/utils"
 )
 
@@ -113,6 +118,11 @@ func setAutoplay(r *core.RoomState, enabled bool) error {
 		return err
 	}
 	r.SetData(autoplayDataKey, enabled)
+	if !enabled {
+		clearAutoplayPrefetch(r.ChatID)
+	} else {
+		scheduleAutoplayPrefetch(r)
+	}
 	return nil
 }
 
@@ -232,4 +242,146 @@ func hasAutoplayListener(r *core.RoomState) bool {
 		return true
 	}
 	return false
+}
+
+// --- Autoplay prefetch -------------------------------------------------
+//
+// Resolves and downloads the *next* autoplay candidate in the background
+// while the current track is still playing, so streamEndHandler / /skip can
+// switch instantly instead of doing a fresh search + download only after
+// the stream has already ended.
+
+// prefetchedAutoplay is a fully resolved + already-downloaded autoplay
+// candidate, cached against the track it was prepared for.
+type prefetchedAutoplay struct {
+	forTrackID string
+	track      *state.Track
+	filePath   string
+}
+
+var (
+	prefetchMu      sync.Mutex
+	prefetchCache   = map[int64]*prefetchedAutoplay{}
+	prefetchCancels = map[int64]context.CancelFunc{}
+)
+
+// clearAutoplayPrefetch cancels any in-flight prefetch for chatID and drops
+// whatever result had already been cached (and deletes its downloaded file,
+// since nothing will ever play it now).
+//
+// Call this whenever the "obvious next song" stops being predictable from
+// the currently playing track: /stop, /skip, autoplay turned off, or a
+// track manually added to the queue.
+func clearAutoplayPrefetch(chatID int64) {
+	prefetchMu.Lock()
+	cancel, hasCancel := prefetchCancels[chatID]
+	cached, hasCached := prefetchCache[chatID]
+	delete(prefetchCancels, chatID)
+	delete(prefetchCache, chatID)
+	prefetchMu.Unlock()
+
+	if hasCancel && cancel != nil {
+		cancel()
+	}
+	if hasCached && cached != nil && cached.filePath != "" {
+		_ = os.Remove(cached.filePath)
+	}
+}
+
+// takeAutoplayPrefetch returns (and removes) a cached, already-downloaded
+// autoplay track if one was prepared for finishedTrackID. It also verifies
+// the file still exists on disk before trusting it.
+func takeAutoplayPrefetch(chatID int64, finishedTrackID string) (*state.Track, string) {
+	prefetchMu.Lock()
+	defer prefetchMu.Unlock()
+
+	p, ok := prefetchCache[chatID]
+	if !ok || p.forTrackID != finishedTrackID || p.track == nil || p.filePath == "" {
+		return nil, ""
+	}
+	delete(prefetchCache, chatID)
+
+	if _, err := os.Stat(p.filePath); err != nil {
+		return nil, "" // file got cleaned up / moved from under us — caller falls back to a fresh download
+	}
+	return p.track, p.filePath
+}
+
+// scheduleAutoplayPrefetch starts a background goroutine that resolves and
+// downloads the next autoplay candidate for the room's *currently playing*
+// track. It is safe (and cheap) to call every time a track starts — it
+// silently no-ops when autoplay is off, there's no current track, or manual
+// tracks are already queued (autoplay wouldn't be used next anyway).
+//
+// Call this right after every successful r.Play(...) — in streamEndHandler,
+// in /skip, and in your /play success path too — so a candidate is always
+// ready ahead of time instead of only after the first autoplay transition.
+func scheduleAutoplayPrefetch(r *core.RoomState) {
+	if r == nil {
+		return
+	}
+	chatID := r.ChatID
+	current := r.Track()
+	if current == nil || !autoplayEnabled(r) || len(r.Queue()) > 0 {
+		return
+	}
+
+	clearAutoplayPrefetch(chatID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	prefetchMu.Lock()
+	prefetchCancels[chatID] = cancel
+	prefetchMu.Unlock()
+
+	go func() {
+		defer func() {
+			prefetchMu.Lock()
+			if prefetchCancels[chatID] != nil {
+				delete(prefetchCancels, chatID)
+			}
+			prefetchMu.Unlock()
+		}()
+
+		if !hasAutoplayListener(r) {
+			return
+		}
+
+		historyIDs := recentAutoplayTracks(r)
+		historyTitles := recentAutoplayTitles(r)
+
+		track, err := platforms.AutoplayTrack(current, historyIDs, historyTitles)
+		if err != nil {
+			gologging.DebugF("[autoplay-prefetch] no candidate for %d: %v", chatID, err)
+			return
+		}
+		if ctx.Err() != nil {
+			return
+		}
+
+		filePath, err := platforms.Download(ctx, track, nil)
+		if err != nil {
+			gologging.WarnF("[autoplay-prefetch] download failed for %d: %v", chatID, err)
+			return
+		}
+		if ctx.Err() != nil {
+			_ = os.Remove(filePath) // request was cancelled after download finished — clean up
+			return
+		}
+
+		// The room may have moved on while we were working (skip, stop, a
+		// manual track queued, autoplay turned off) — don't cache a stale
+		// result, and don't leak the file we just downloaded for nothing.
+		if r.Track() == nil || r.Track().ID != current.ID || len(r.Queue()) > 0 || !autoplayEnabled(r) {
+			_ = os.Remove(filePath)
+			return
+		}
+
+		prefetchMu.Lock()
+		prefetchCache[chatID] = &prefetchedAutoplay{
+			forTrackID: current.ID,
+			track:      track,
+			filePath:   filePath,
+		}
+		prefetchMu.Unlock()
+	}()
 }
