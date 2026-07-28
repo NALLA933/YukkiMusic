@@ -19,6 +19,7 @@ package modules
 
 import (
 	"context"
+	"os"
 
 	"github.com/Laky-64/gologging"
 	"github.com/amarnathcjd/gogram/telegram"
@@ -67,24 +68,34 @@ func streamEndHandler(
 
 	var t *state.Track
 	var wasLooping bool
+	var prefetchedFilePath string
 	if len(r.Queue()) == 0 && r.Loop() == 0 {
 		if current := r.Track(); autoplayEnabled(r) && current != nil {
 			if !hasAutoplayListener(r) {
 				r.SetData(autoplayDataKey, false)
+				clearAutoplayPrefetch(chatID)
 				core.DeleteRoom(chatID)
 				core.Bot.SendMessage(cid, F(cid, "autoplay_stopped_no_listeners"))
 				return
 			}
 
-			var autoplayErr error
-			historyIDs := recentAutoplayTracks(r)
-			historyTitles := recentAutoplayTitles(r)
-			t, autoplayErr = platforms.AutoplayTrack(current, historyIDs, historyTitles)
-			if autoplayErr != nil {
-				gologging.ErrorF("[onStreamEndHandler] Autoplay search failed: %v", autoplayErr)
-				core.DeleteRoom(chatID)
-				core.Bot.SendMessage(cid, F(cid, "stream_queue_finished"))
-				return
+			// A prefetched candidate was already resolved + downloaded while
+			// `current` was still playing — use it directly and skip the
+			// search + download that would otherwise happen only now.
+			if cachedTrack, cachedPath := takeAutoplayPrefetch(chatID, current.ID); cachedTrack != nil {
+				t = cachedTrack
+				prefetchedFilePath = cachedPath
+			} else {
+				var autoplayErr error
+				historyIDs := recentAutoplayTracks(r)
+				historyTitles := recentAutoplayTitles(r)
+				t, autoplayErr = platforms.AutoplayTrack(current, historyIDs, historyTitles)
+				if autoplayErr != nil {
+					gologging.ErrorF("[onStreamEndHandler] Autoplay search failed: %v", autoplayErr)
+					core.DeleteRoom(chatID)
+					core.Bot.SendMessage(cid, F(cid, "stream_queue_finished"))
+					return
+				}
 			}
 			r.AddTracksToQueue([]*state.Track{t})
 			t = r.NextTrack()
@@ -94,6 +105,7 @@ func streamEndHandler(
 			return
 		}
 	} else {
+		clearAutoplayPrefetch(chatID) // a manually queued track is next, not an autoplay pick
 		wasLooping = r.Loop() > 0
 		t = r.NextTrack()
 	}
@@ -120,7 +132,12 @@ func streamEndHandler(
 	var filePath string
 	if wasLooping && t != nil && r.FilePath() != "" {
 		filePath = r.FilePath()
-	} else {
+	} else if prefetchedFilePath != "" {
+		if _, statErr := os.Stat(prefetchedFilePath); statErr == nil {
+			filePath = prefetchedFilePath
+		}
+	}
+	if filePath == "" {
 		filePath, err = platforms.Download(context.Background(), t, statusMsg)
 	}
 
@@ -151,6 +168,7 @@ func streamEndHandler(
 	}
 
 	rememberAutoplayTrack(r, t.ID, t.Title)
+	scheduleAutoplayPrefetch(r)
 
 	title := utils.ShortTitle(t.Title, 25)
 	safeTitle := utils.EscapeHTML(title)
