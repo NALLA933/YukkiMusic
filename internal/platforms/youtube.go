@@ -321,7 +321,9 @@ func AutoplayTrack(current *state.Track, historyIDs, historyTitles []string) (*s
 	}
 
 	track := candidates[rand.Intn(len(candidates))]
-	track.Video = current.Video
+	// Autoplay always plays audio only, regardless of whether the track
+	// that triggered it was played as video.
+	track.Video = false
 	track.Requester = "Autoplay"
 	return track, nil
 }
@@ -543,7 +545,9 @@ func (p *YouTubePlatform) relatedTrack(videoID string, current *state.Track, exc
 	}
 
 	track := candidates[rand.Intn(len(candidates))]
-	track.Video = current.Video
+	// Autoplay always plays audio only, regardless of whether the track
+	// that triggered it was played as video.
+	track.Video = false
 	track.Requester = "Autoplay"
 	return track, nil
 }
