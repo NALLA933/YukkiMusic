@@ -286,30 +286,18 @@ func AutoplayTrack(current *state.Track, historyIDs, historyTitles []string) (*s
 	excludedIDs := autoplayExcludeSet(current.ID, historyIDs)
 	excludedTitles := append([]string{current.Title}, historyTitles...)
 
-	// Autoplay always looks for the next track on the SAME platform the
-	// current one was played from — a Spotify-played song gets Spotify
-	// recommendations, a YouTube-played song gets YouTube's related videos.
-	// It never silently falls back to a different platform's search; the
-	// actual audio download still always happens via YouTube underneath
-	// (SpotifyPlatform.Download already resolves Spotify tracks to a
-	// YouTube source for downloading), only the *recommendation source*
-	// is kept strict here.
 	if current.Source == PlatformSpotify {
-		return spotifyAutoplayTrack(current, excludedIDs, excludedTitles)
+		if track, err := spotifyAutoplayTrack(current, excludedIDs, excludedTitles); err == nil {
+			return track, nil
+		}
 	}
 
-	videoID := yt.extractVideoID(current.URL)
-	if videoID == "" {
-		return nil, errors.New("current track has no YouTube video id")
+	if videoID := yt.extractVideoID(current.URL); videoID != "" {
+		if track, err := yt.relatedTrack(videoID, current, excludedIDs, excludedTitles); err == nil {
+			return track, nil
+		}
 	}
 
-	if track, err := yt.relatedTrack(videoID, current, excludedIDs, excludedTitles); err == nil {
-		return track, nil
-	}
-
-	// YouTube's related-videos endpoint found nothing usable — fall back to
-	// a plain YouTube search by title. This is still the same platform
-	// (YouTube), just a different lookup method within it.
 	results, err := yt.VideoSearch(current.Title, false)
 	if err != nil {
 		return nil, err
