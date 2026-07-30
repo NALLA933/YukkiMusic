@@ -416,7 +416,8 @@ func spotifyAutoplayTrack(current *state.Track, excludedIDs map[string]bool, exc
 
 	chosen := candidates[rand.Intn(len(candidates))]
 	track := spotifyPlatform.convertSpotifyTrack(&chosen, nil)
-	track.Video = current.Video
+	// Autoplay always plays audio only, regardless of the source track.
+	track.Video = false
 	track.Requester = "Autoplay"
 	return track, nil
 }
